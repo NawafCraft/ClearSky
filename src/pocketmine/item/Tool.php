@@ -124,4 +124,8 @@ abstract class Tool extends Item{
 	public function getDamageStep($target){
 		return 1;
 	}
+	
+	public function canBeDamaged(){
+		return true;
+	}
 }
