@@ -181,14 +181,9 @@ abstract class BaseInventory implements Inventory{
 		$checkTags = $item->getCompoundTag() === null ? false : true;
 
 		foreach($this->getContents() as $index => $i){
-<<<<<<< HEAD
-			if($item->equals($i, $checkDamage, $checkTags)){
-				$this->clear($index);
-=======
 			if($item->equals($i, $checkDamage, $checkTags, $checkCount)){
 				$this->clear($index, $send);
 				break;
->>>>>>> 40b3215... Start using queuing for handling inventory transactions
 			}
 		}
 	}
@@ -254,7 +249,7 @@ abstract class BaseInventory implements Inventory{
 
 		$emptySlots = [];
 
-		for($i = 0; $i < $this->getSize(); ++$i){
+		for($i = 0; $i < ($this->getSize()/* - $this->getHotbarSize()*/); ++$i){
 			$item = $this->getItem($i);
 			if($item->getId() === Item::AIR or $item->getCount() <= 0){
 				$emptySlots[] = $i;
