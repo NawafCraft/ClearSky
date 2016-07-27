@@ -2485,11 +2485,8 @@ class Player extends Human implements CommandSender, InventoryHolder, ChunkLoade
 				}
 				$this->craftingType = 0;
 				$vector = new Vector3($packet->x, $packet->y, $packet->z);
-				if($this->isCreative()){
-					$item = $this->inventory->getItemInHand();
-				}else{
-					$item = $this->inventory->getItemInHand();
-				}
+
+				$item = $this->inventory->getItemInHand();
 				$oldItem = clone $item;
 				if($this->canInteract($vector->add(0.5, 0.5, 0.5), $this->isCreative() ? 8 : 6) and $this->level->useBreakOn($vector, $item, $this, true)){
 					if($this->isSurvival()){
