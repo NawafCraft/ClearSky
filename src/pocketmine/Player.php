@@ -62,7 +62,6 @@ use pocketmine\inventory\InventoryHolder;
 use pocketmine\inventory\PlayerInventory;
 use pocketmine\inventory\ShapedRecipe;
 use pocketmine\inventory\ShapelessRecipe;
-//use pocketmine\inventory\SimpleTransactionGroup;
 use pocketmine\inventory\Transaction;
 use pocketmine\inventory\transaction\DropItemTransaction;
 use pocketmine\item\enchantment\Enchantment;
@@ -170,8 +169,6 @@ class Player extends Human implements CommandSender, InventoryHolder, ChunkLoade
 	public $achievements = [];
 	public $lastCorrect;
 	
-	//protected $currentTransaction = null;
-	
 	public $craftingType = 0; //0 = 2x2 crafting, 1 = 3x3 crafting, 2 = stonecutter
 
 	protected $isCrafting = false;
@@ -198,6 +195,8 @@ class Player extends Human implements CommandSender, InventoryHolder, ChunkLoade
 	private $isXbox = null;
 	private $xboxData = null;
 	private $webtokens = [];
+
+	private $loaderId = null;
 
 	private $loaderId = null;
 	protected $stepHeight = 0.6;
@@ -2042,6 +2041,7 @@ class Player extends Human implements CommandSender, InventoryHolder, ChunkLoade
 			$timings->stopTiming();
 			return;
 		}
+
 		switch($packet::NETWORK_ID){
 			case ProtocolInfo::ITEM_FRAME_DROP_ITEM_PACKET:
 				$tile = $this->level->getTile($this->temporalVector->setComponents($packet->x, $packet->y, $packet->z));
@@ -2677,7 +2677,7 @@ class Player extends Human implements CommandSender, InventoryHolder, ChunkLoade
 				if($packet->item->getId() === Item::AIR){
 					/**
 					 * This is so stupid it's unreal. 
-					 * Win10 drops the contents of the crafting grid when the inventory closes - including air.
+					 * Windows 10 Edition Beta drops the contents of the crafting grid when the inventory closes - including air.
 					 */
 					break;
 				}
@@ -2724,7 +2724,6 @@ class Player extends Human implements CommandSender, InventoryHolder, ChunkLoade
 					break;
 				}
 				$this->craftingType = 0;
-				//$this->currentTransaction = null;
 				if(isset($this->windowIndex[$packet->windowid])){
 					if($this->windowIndex[$packet->windowid] instanceof EnchantInventory or $this->windowIndex[$packet->windowid] instanceof AnvilInventory){
 						$this->recalculateXpProgress();
@@ -2734,17 +2733,24 @@ class Player extends Human implements CommandSender, InventoryHolder, ChunkLoade
 					}
 					$this->server->getPluginManager()->callEvent(new InventoryCloseEvent($this->windowIndex[$packet->windowid], $this));
 					$this->removeWindow($this->windowIndex[$packet->windowid]);
-				}else{
-					unset($this->windowIndex[$packet->windowid]);
 				}
 				
-				//This should never be needed when these changes are stabilized
-				//Drop the contents of the floating inventory
+				/**
+				 * Drop anything still left in the crafting inventory
+				 * This will usually never be needed since Windows 10 clients will send DropItemPackets
+				 * which will cause this to happen anyway, but this is here for when transactions
+				 * fail and items end up stuck in the crafting inventory.
+				 */
 				foreach($this->getCraftingInventory()->getContents() as $item){
 					$this->getTransactionQueue()->addTransaction(new DropItemTransaction($item));
 				}
 				break;
-				case ProtocolInfo::CRAFTING_EVENT_PACKET:
+			case ProtocolInfo::CRAFTING_EVENT_PACKET:
+			
+				//TODO: Rewrite this entire stupid mess
+				/* Under here is a lot of excess, conflicting, duplicated and useless code.
+				 * Throw the whole lot out and clean it up. */
+				
 				if($this->spawned === false or !$this->isAlive()){
 					break;
 				}
@@ -2753,14 +2759,15 @@ class Player extends Human implements CommandSender, InventoryHolder, ChunkLoade
 				* The result of this is anvils immediately closing when used. This is highly unusual, especially since the
 				* container set slot packets send the correct window ID, but... eh
 				*/
-				/*elseif(!isset($this->windowIndex[$packet->windowId])){
+				elseif(!isset($this->windowIndex[$packet->windowId])){
 					$this->inventory->sendContents($this);
 					$pk = new ContainerClosePacket();
 					$pk->windowid = $packet->windowId;
 					$this->dataPacket($pk);
 					break;
-					}*/
+				}
 
+				$recipe = $this->server->getCraftingManager()->getRecipe($packet->id);
 					$recipe = $this->server->getCraftingManager()->getRecipe($packet->id);
 
 					if($this->craftingType === self::CRAFTING_ANVIL){
@@ -2779,24 +2786,8 @@ class Player extends Human implements CommandSender, InventoryHolder, ChunkLoade
 							}
 						}
 
-						if($recipe === null){
-							//Item renamed
-							if(!$anvilInventory->onRename($this, $packet->output[0])){
-								$this->getServer()->getLogger()->debug($this->getName()." failed to rename an item in an anvil");
-								$this->inventory->sendContents($this);
-							}
-						}else{
-							//TODO: Anvil crafting recipes
-						}
-						break;
-					}elseif(($recipe instanceof BigShapelessRecipe or $recipe instanceof BigShapedRecipe) and $this->craftingType === 0){
-						$this->server->getLogger()->debug("Received big crafting recipe from ".$this->getName()." with no crafting table open");
-						$this->inventory->sendContents($this);
-						break;
-					}elseif($recipe === null){
-						$this->server->getLogger()->debug("Null (unknown) crafting recipe received from ".$this->getName()." for ".$packet->output[0]);
-						$this->inventory->sendContents($this);
-						break;
+					if($i < 9 and $item->getId() > 0){ //TODO: Get rid of this hack.
+						$item->setCount(1);
 					}
 
 				$canCraft = true;
@@ -2816,8 +2807,8 @@ class Player extends Human implements CommandSender, InventoryHolder, ChunkLoade
 					 */
 					$possibleRecipes = $this->server->getCraftingManager()->getRecipesByResult($packet->output[0]);
 					foreach($possibleRecipes as $r){
-						//Check the ingredient list and see if it matches the ingredients we've put into the crafting grid
-						//As soon as we find a recipe that we have all the ingredients for, take it and run with it.
+						/* Check the ingredient list and see if it matches the ingredients we've put into the crafting grid
+						 * As soon as we find a recipe that we have all the ingredients for, take it and run with it. */
 						
 						//Make a copy of the crafting inventory that we can make changes to.
 						$craftingInventory = clone $this->craftingInventory;
@@ -2968,6 +2959,23 @@ class Player extends Human implements CommandSender, InventoryHolder, ChunkLoade
 						}else{
 							$canCraft = false;
 						}
+					}else{
+						$canCraft = false;
+					}	
+				}
+
+				//Nasty hack. TODO: Get rid
+				$canCraft = true;//0.13.1大量物品本地配方出现问题,无法解决,使用极端(唯一)方法修复.
+				
+				/** @var Item[] $ingredients */
+				$ingredients = $packet->input;
+				$result = $packet->output[0];
+
+				if(!$canCraft or !$recipe->getResult()->deepEquals($result)){
+					$this->server->getLogger()->debug("Unmatched recipe " . $recipe->getId() . " from player " . $this->getName() . ": expected " . $recipe->getResult() . ", got " . $result . ", using: " . implode(", ", $ingredients));
+					$this->inventory->sendContents($this);
+					break;
+				}
 
 						//Nasty hack. TODO: Get rid
 						$canCraft = true;//0.13.1大量物品本地配方出现问题,无法解决,使用极端(唯一)方法修复.
@@ -3008,7 +3016,7 @@ class Player extends Human implements CommandSender, InventoryHolder, ChunkLoade
 
 						$this->server->getPluginManager()->callEvent($ev = new CraftItemEvent($this, $ingredients, $recipe));
 
-				//Only do this if the crafting was not desktop style
+				//Only do this if the crafting was NOT desktop style
 				if(!$isDesktopCrafting){
 					foreach($used as $slot => $count){
 						if($count === 0){
@@ -3032,16 +3040,17 @@ class Player extends Human implements CommandSender, InventoryHolder, ChunkLoade
 							$this->inventory->setItem($slot, $newItem);
 						}
 
-						$extraItem = $this->inventory->addItem($recipe->getResult());
-						if(count($extraItem) > 0){ //Could not add all the items to our inventory (not enough space)
-							foreach($extraItem as $item){
-								$this->level->dropItem($this, $item);
-							}
+						$this->inventory->setItem($slot, $newItem);
+					}
+					
+					$extraItem = $this->inventory->addItem($recipe->getResult());
+					if(count($extraItem) > 0){ //Could not add all the items to our inventory (not enough space)
+						foreach($extraItem as $item){
+							$this->level->dropItem($this, $item);
 						}
 					}
-
-					switch($recipe->getResult()->getId()){
-						case Item::WORKBENCH:
+				switch($recipe->getResult()->getId()){
+					case Item::WORKBENCH:
 						$this->awardAchievement("buildWorkBench");
 						break;
 						case Item::WOODEN_PICKAXE:
@@ -3058,6 +3067,7 @@ class Player extends Human implements CommandSender, InventoryHolder, ChunkLoade
 						break;
 						case Item::CAKE:
 						//TODO: detect complex recipes like cake that leave remains
+						//I'm going to have to do this, otherwise Win10 will be able to duplicate buckets
 						$this->awardAchievement("bakeCake");
 						$this->inventory->addItem(Item::get(Item::BUCKET, 0, 3));
 						break;
@@ -3075,8 +3085,9 @@ class Player extends Human implements CommandSender, InventoryHolder, ChunkLoade
 						break;
 					}
 
-					break;
-				case ProtocolInfo::CONTAINER_SET_SLOT_PACKET:
+				break;
+
+			case ProtocolInfo::CONTAINER_SET_SLOT_PACKET:
 				if($this->spawned === false or $this->blocked === true or !$this->isAlive()){
 					break;
 				}
@@ -3088,20 +3099,20 @@ class Player extends Human implements CommandSender, InventoryHolder, ChunkLoade
 					if($packet->slot >= $this->inventory->getSize()){
 						break;
 					}
-					$transaction = new BaseTransaction($this->inventory, $packet->slot, $this->inventory->getItem($packet->slot), $packet->item);
+					$transaction = new BaseTransaction($this->inventory, $packet->slot, $packet->item);
 				}elseif($packet->windowid === ContainerSetContentPacket::SPECIAL_ARMOR){ //Our armor
 					if($packet->slot >= 4){
 						break;
 					}
-					$transaction = new BaseTransaction($this->inventory, $packet->slot + $this->inventory->getSize(), $this->inventory->getArmorItem($packet->slot), $packet->item);
-				}elseif(isset($this->windowIndex[$packet->windowid])){ //Other type of inventory window
+					$transaction = new BaseTransaction($this->inventory, $packet->slot + $this->inventory->getSize(), $packet->item);
+				}elseif(isset($this->windowIndex[$packet->windowid])){ 
+					//Transaction for non-player-inventory window, such as anvil, chest, etc.
 				
-					//TODO: Make Anvils use the floating inventory. They do not currently function on Win10.
+					//TODO: Make Anvils use the floating inventory. They do not currently function with the new transaction API.
 				
 					$this->craftingType = 0;
 					$inv = $this->windowIndex[$packet->windowid];
 
-					/** @var $packet \pocketmine\network\protocol\ContainerSetSlotPacket */
 					if($inv instanceof EnchantInventory and $packet->item->hasEnchantments()){
 						$inv->onEnchant($this, $inv->getItem($packet->slot), $packet->item);
 						
@@ -3118,60 +3129,15 @@ class Player extends Human implements CommandSender, InventoryHolder, ChunkLoade
 						}
 					}
 
-					$transaction = new BaseTransaction($inv, $packet->slot, $inv->getItem($packet->slot), $packet->item);
+					$transaction = new BaseTransaction($inv, $packet->slot, $packet->item);
 				}else{
-					echo "no window open; dropped an item?\n";
+					//Client sent a transaction for a window which the server doesn't think they have open
 					break;
-					//Dropped an item?
-					//$transaction = new BaseTransaction($this->inventory, $packet->slot, $this->inventory->getItem($packet->slot), $packet->item);
 				}
 				
-				//echo "adding a transaction\n";
 				$this->getTransactionQueue()->addTransaction($transaction);
-				/*if($this->currentTransaction === null){
-					echo "creating a new transaction group\n";
-					$this->currentTransaction = new OrderedTransactionGroup($this);
-				}
-				//What happens if the transaction is already in progress when you add another one? Potential issue there
-				
-				$this->currentTransaction->addTransaction($transaction);*/
-				
-				
-				/*if($this->currentTransaction === null or $this->currentTransaction->getCreationTime() < (microtime(true) - 8)){
-					if($this->currentTransaction !== null){
-						foreach($this->currentTransaction->getInventories() as $inventory){
-							if($inventory instanceof PlayerInventory){
-								$inventory->sendArmorContents($this);
-							}
-							$inventory->sendContents($this);
-						}
-					}
-					$this->currentTransaction = new SimpleTransactionGroup($this);
-				}
-				$this->currentTransaction->addTransaction($transaction);
-				
-				if($this->currentTransaction->canExecute()){
-					$achievements = [];
-					foreach($this->currentTransaction->getTransactions() as $ts){
-						$inv = $ts->getInventory();
-						if($inv instanceof FurnaceInventory){
-							if($ts->getSlot() === 2){
-								switch($inv->getResult()->getId()){
-									case Item::IRON_INGOT:
-										$achievements[] = "acquireIron";
-										break;
-								}
-							}
-						}
-					}
+				//TODO: Fix "Acquire Iron" achievement
 
-					if($this->currentTransaction->execute()){
-						foreach($achievements as $a){
-							$this->awardAchievement($a);
-						}
-					}
-					$this->currentTransaction = null;
-				}*/
 				break;
 			case ProtocolInfo::BLOCK_ENTITY_DATA_PACKET:
 				if($this->spawned === false or $this->blocked === true or !$this->isAlive()){
@@ -3423,10 +3389,8 @@ class Player extends Human implements CommandSender, InventoryHolder, ChunkLoade
 			$this->perm = null;
 		}
 
-		if($this->inventory !== null){
-			$this->inventory = null;
-			$this->currentTransaction = null;
-		}
+		$this->inventory = null;
+		$this->transactionQueue = null;
 
 		$this->chunk = null;
 
