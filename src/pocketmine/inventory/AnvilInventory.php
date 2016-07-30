@@ -16,9 +16,10 @@ class AnvilInventory extends ContainerInventory{
 		return $this->holder;
 	}
 
-	public function onRename(Item $item, Player $player){
-		if($player->getXpLevel() > $item->getRepairCost()){
-			$player->setXpLevel($player->getXpLevel() - $item->getRepairCost());
+	public function onRename(Player $player) : bool{
+		$item = $this->getItem(2);
+		if($player->getExpLevel() > $item->getRepairCost()){
+			$player->setExpLevel($player->getExpLevel() - $item->getRepairCost());
 			return true;
 		}
 		return false;
