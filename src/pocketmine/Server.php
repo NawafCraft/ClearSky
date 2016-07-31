@@ -316,6 +316,56 @@ class Server{
 	
 	/** Name of nether world */
 	public $netherName = "nether";
+	public $netherLevel = null;
+	public $weatherRandomDurationMin = 6000;
+	public $weatherRandomDurationMax = 12000;
+	public $hungerHealth = 10;
+	public $lightningTime = 200;
+	public $lightningFire = false;
+	public $expCache = [];
+	public $expWriteAhead = 200;
+	public $aiConfig = [];
+	public $aiEnabled = false;
+	public $aiHolder = null;
+	public $inventoryNum = 36;
+	public $hungerTimer = 80;
+	public $version;
+	public $allowSnowGolem;
+	public $allowIronGolem;
+	public $autoClearInv = true;
+	public $dserverConfig = [];
+	public $dserverPlayers = 0;
+	public $dserverAllPlayers = 0;
+	public $redstoneEnabled = false;
+	public $allowFrequencyPulse = true;
+	public $anvilEnabled = false;
+	public $pulseFrequency = 20;
+	public $playerMsgType = self::PLAYER_MSG_TYPE_MESSAGE;
+	public $playerLoginMsg = "";
+	public $playerLogoutMsg = "";
+	public $antiFly = false;
+	public $asyncChunkRequest = true;
+	public $recipesFromJson = false;
+	public $creativeItemsFromJson = false;
+	public $minecartMovingType = 0;
+	public $checkMovement = false;
+	public $keepExperience = false;
+	public $limitedCreative = true;
+	public $chunkRadius = -1;
+	public $destroyBlockParticle = true;
+	public $allowSplashPotion = true;
+	public $fireSpread = false;
+	public $advancedCommandSelector = false;
+	public $synapseConfig = [];
+	public $enchantingTableEnabled = true;
+	public $countBookshelf = false;
+	public $allowInventoryCheats = false; //TODO::MAKE CONFIGURABLE CS_ONLY **---***
+
+	/** @var CraftingDataPacket */
+	private $recipeList = null;
+
+	/** @var Synapse */
+	private $synapse = null;
 
 	/**
 	 * @return string
