@@ -2488,7 +2488,9 @@ class Player extends Human implements CommandSender, InventoryHolder, ChunkLoade
 
 				$item = $this->inventory->getItemInHand();
 				$oldItem = clone $item;
-				if($this->canInteract($vector->add(0.5, 0.5, 0.5), $this->isCreative() ? 8 : 6) and $this->level->useBreakOn($vector, $item, $this, true)){
+
+				//TODO: Fix block break lag in survival
+				if($this->canInteract($vector->add(0.5, 0.5, 0.5), $this->isCreative() ? 13 : 6) and $this->level->useBreakOn($vector, $item, $this, $this->server->destroyBlockParticle)){
 					if($this->isSurvival()){
 						if(!$item->equals($oldItem) or $item->getCount() !== $oldItem->getCount()){
 							$this->inventory->setItemInHand($item);
@@ -2509,6 +2511,7 @@ class Player extends Human implements CommandSender, InventoryHolder, ChunkLoade
 				}
 				break;
 			case ProtocolInfo::MOB_ARMOR_EQUIPMENT_PACKET:
+				//This packet is ignored. Armour changes are also sent by ContainerSetSlotPackets, and are handled there instead.
 				break;
 			case ProtocolInfo::INTERACT_PACKET:
 				if($this->spawned === false or !$this->isAlive() or $this->blocked){
@@ -2741,7 +2744,7 @@ class Player extends Human implements CommandSender, InventoryHolder, ChunkLoade
 				 * which will cause this to happen anyway, but this is here for when transactions
 				 * fail and items end up stuck in the crafting inventory.
 				 */
-				foreach($this->getCraftingInventory()->getContents() as $item){
+				foreach($this->getFloatingInventory()->getContents() as $item){
 					$this->getTransactionQueue()->addTransaction(new DropItemTransaction($item));
 				}
 				break;
@@ -2810,23 +2813,26 @@ class Player extends Human implements CommandSender, InventoryHolder, ChunkLoade
 						/* Check the ingredient list and see if it matches the ingredients we've put into the crafting grid
 						 * As soon as we find a recipe that we have all the ingredients for, take it and run with it. */
 						
-						//Make a copy of the crafting inventory that we can make changes to.
-						$craftingInventory = clone $this->craftingInventory;
+						//Make a copy of the floating inventory that we can make changes to.
+						$floatingInventory = clone $this->floatingInventory;
 						$ingredients = $r->getIngredientList();
 
 						//Check we have all the necessary ingredients.
 						foreach($ingredients as $ingredient){
-							if(!$craftingInventory->contains($ingredient)){
+							if(!$floatingInventory->contains($ingredient)){
 								//We're short on ingredients, try the next recipe
 								$canCraft = false;
 								break;
 							}
 							//This will only be reached if we have the item to take away.
-							$craftingInventory->removeItem($ingredient);
+							$floatingInventory->removeItem($ingredient);
 						}
-
-						if($i < 9 and $item->getId() > 0){ //TODO: Get rid of this hack.
-							$item->setCount(1);
+						if($canCraft){
+							//Found a recipe that works, take it and run with it.
+							$recipe = $r;
+							$this->floatingInventory = $floatingInventory; //Set player crafting inv to the idea one created in this process
+							$this->floatingInventory->addItem(clone $recipe->getResult()); //Add the result to our picture of the crafting inventory
+							break;
 						}
 					}
 				}else{
