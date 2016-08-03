@@ -327,7 +327,6 @@ class Server{
 	public $aiConfig = [];
 	public $aiEnabled = false;
 	public $aiHolder = null;
-	public $inventoryNum = 36;
 	public $hungerTimer = 80;
 	public $version;
 	public $allowSnowGolem;
@@ -1496,9 +1495,6 @@ class Server{
 		return self::$instance;
 	}
 	
-	/**
-	 * ClearSky internal use
-	 */
 	private function translateConfig($config, $language = "eng"){
 		if(!file_exists($this->filePath . "src/pocketmine/resources/".$language.".json")){
 			$language = "eng";
@@ -1728,7 +1724,7 @@ class Server{
 		$this->registerEntities();
 		$this->registerTiles();
 
-		InventoryType::init($this->getProperty("player.inventory.slot", 36));
+		InventoryType::init(); //TODO::REMOVE OUT OF POCKETMINE.yml **CSONLY**
 		Block::init();
 		Item::init();
 		Biome::init();
