@@ -6,12 +6,12 @@ use pocketmine\level\Position;
 use pocketmine\Player;
 
 class AnvilInventory extends TemporaryInventory{
-	
+
 	const TARGET = 0;
 	const SACRIFICE = 1;
 	const RESULT = 2;
-	
-	
+
+
 	public function __construct(Position $pos){
 		parent::__construct(new FakeBlockMenu($this, $pos), InventoryType::get(InventoryType::ANVIL));
 	}
@@ -21,11 +21,11 @@ class AnvilInventory extends TemporaryInventory{
 	public function getHolder(){
 		return $this->holder;
 	}
-	
+
 	public function getResultSlotIndex(){
 		return self::RESULT;
 	}
-	
+
 	public function onRename(Player $player) : bool{
 		$item = $this->getItem(self::RESULT);
 		if($player->getExpLevel() > $item->getRepairCost()){
@@ -34,7 +34,7 @@ class AnvilInventory extends TemporaryInventory{
 		}
 		return false;
 	}
-	
+
 	public function processSlotChange(Transaction $transaction): bool{
 		//If ANY slot in the anvil changes, we need to recalculate the anvil contents
 		if($transaction->getSlot() === $this->getResultSlotIndex() and $transaction->getTargetItem()->getId() === Item::AIR){
@@ -43,11 +43,11 @@ class AnvilInventory extends TemporaryInventory{
 			//when anvils are fixed and they send crafting event packets maybe this will be able
 			//to be done properly.
 		}
-		
-		
+
+
 		$this->setItem($transaction->getSlot(), $transaction->getTargetItem(), false);
 		return false;
-		
+
 		/*f($transaction->getSlot() === $this->getResultSlotIndex()){
 			if($transaction->getTargetItem()->getId() === Item::AIR){
 				echo "changing result slot to air\n";
@@ -68,7 +68,7 @@ class AnvilInventory extends TemporaryInventory{
 				return false;
 			}else{
 				echo "changing result slot to something\n";
-				
+
 				//result slot changed some other way
 				//TODO: check count changes
 				$this->setItem(self::RESULT, $transaction->getTargetItem(), false);
@@ -76,7 +76,7 @@ class AnvilInventory extends TemporaryInventory{
 			}
 		}else{
 			echo "changing other slot\n";
-				
+
 			if($transaction->getTargetItem()->getId() === Item::AIR){
 				//item removed from either the sacrifice slot or the target slot
 				$this->clear(self::RESULT);
@@ -87,7 +87,7 @@ class AnvilInventory extends TemporaryInventory{
 			return true;
 		}*/
 	}
-	
+
 	public function onSlotChange($index, $before, $send){
 		//Do not send anvil slot updates to anyone. This will cause client crash.
 	}

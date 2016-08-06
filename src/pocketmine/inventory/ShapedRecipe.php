@@ -94,7 +94,7 @@ class ShapedRecipe implements Recipe{
 		if(!array_key_exists($key, $this->shape)){
 			throw new \Throwable("Symbol does not appear in the shape: " . $key);
 		}
-		//Quick hack to fix W10 bugs. Whose dumb idea was it to make this happen -_-
+
 		$item->setCount(1);
 		$this->fixRecipe($key, $item);
 
@@ -125,7 +125,7 @@ class ShapedRecipe implements Recipe{
 
 		return $ingredients;
 	}
-	
+
 	/**
  	 * @return Item[]
  	 */
