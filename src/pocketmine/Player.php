@@ -144,6 +144,11 @@ class Player extends Human implements CommandSender, InventoryHolder, ChunkLoade
 	const ADVENTURE = 2;
 	const SPECTATOR = 3;
 	const VIEW = Player::SPECTATOR;
+	
+	const CRAFTING_SMALL = 0;
+	const CRAFTING_BIG = 1;
+	const CRAFTING_ANVIL = 2;
+	const CRAFTING_ENCHANT = 3;
 
 	/** @var SourceInterface */
 	protected $interface;
@@ -169,7 +174,7 @@ class Player extends Human implements CommandSender, InventoryHolder, ChunkLoade
 	public $achievements = [];
 	public $lastCorrect;
 
-	public $craftingType = 0; //0 = 2x2 crafting, 1 = 3x3 crafting, 2 = stonecutter
+	public $craftingType = self::CRAFTING_SMALL; //0 = 2x2 crafting, 1 = 3x3 crafting, 2 = anvil, 3 = enchanting
 
 	protected $isCrafting = false;
 
@@ -2197,7 +2202,9 @@ class Player extends Human implements CommandSender, InventoryHolder, ChunkLoade
 					break;
 				}
 				$blockVector = new Vector3($packet->x, $packet->y, $packet->z);
-				$this->craftingType = 0;
+
+				$this->craftingType = self::CRAFTING_SMALL;
+
 				if($packet->face >= 0 and $packet->face <= 5){ //Use Block, place
 					$this->setDataFlag(self::DATA_FLAGS, self::DATA_FLAG_ACTION, false);
 					if(!$this->canInteract($blockVector->add(0.5, 0.5, 0.5), 13) or $this->isSpectator()){
@@ -2436,7 +2443,9 @@ class Player extends Human implements CommandSender, InventoryHolder, ChunkLoade
 							$this->setBanned(true);
 							break;
 						}
-						$this->craftingType = 0;
+
+						$this->craftingType = self::CRAFTING_SMALL;
+
 						$this->server->getPluginManager()->callEvent($ev = new PlayerRespawnEvent($this, $this->getSpawn()));
 						$this->teleport($ev->getRespawnPosition());
 						$this->setSprinting(false);
@@ -2501,7 +2510,8 @@ class Player extends Human implements CommandSender, InventoryHolder, ChunkLoade
 				if($this->spawned === false or $this->blocked === true or !$this->isAlive()){
 					break;
 				}
-				$this->craftingType = 0;
+				$this->craftingType = self::CRAFTING_SMALL;
+
 				$vector = new Vector3($packet->x, $packet->y, $packet->z);
 
 				$item = $this->inventory->getItemInHand();
@@ -2534,7 +2544,9 @@ class Player extends Human implements CommandSender, InventoryHolder, ChunkLoade
 				if($this->spawned === false or !$this->isAlive() or $this->blocked){
 					break;
 				}
-				$this->craftingType = 0;
+
+				$this->craftingType = self::CRAFTING_SMALL;
+
 				$target = $this->level->getEntity($packet->target);
 				$cancelled = false;
 				/**
@@ -2669,7 +2681,8 @@ class Player extends Human implements CommandSender, InventoryHolder, ChunkLoade
 				if($this->spawned === false or $this->blocked === true or !$this->isAlive()){
 					break;
 				}
-				$this->craftingType = 0;
+				$this->craftingType = self::CRAFTING_SMALL;
+
 				$this->setDataFlag(self::DATA_FLAGS, self::DATA_FLAG_ACTION, false); //TODO: check if this should be true
 				switch($packet->event){
 					case EntityEventPacket::USE_ITEM: //Eating
@@ -2712,7 +2725,7 @@ class Player extends Human implements CommandSender, InventoryHolder, ChunkLoade
 				if($this->spawned === false or !$this->isAlive()){
 					break;
 				}
-				$this->craftingType = 0;
+				$this->craftingType = self::CRAFTING_SMALL;
 				if($packet->type === TextPacket::TYPE_CHAT){
 					$packet->message = TextFormat::clean($packet->message, $this->removeFormat);
 					foreach(explode("\n", $packet->message) as $message){
@@ -2743,7 +2756,7 @@ class Player extends Human implements CommandSender, InventoryHolder, ChunkLoade
 				if($this->spawned === false or $packet->windowid === 0){
 					break;
 				}
-				$this->craftingType = 0;
+				$this->craftingType = self::CRAFTING_SMALL;
 				if(isset($this->windowIndex[$packet->windowid])){
 					$this->server->getPluginManager()->callEvent(new InventoryCloseEvent($this->windowIndex[$packet->windowid], $this));
 					$this->removeWindow($this->windowIndex[$packet->windowid]);
@@ -2764,21 +2777,51 @@ class Player extends Human implements CommandSender, InventoryHolder, ChunkLoade
 					break;
 				}
 				/**
-				* For some annoying reason, anvils send window ID 255 when crafting with them instead of the _actual_ anvil window ID
-				* The result of this is anvils immediately closing when used. This is highly unusual, especially since the
-				* container set slot packets send the correct window ID, but... eh
-				*/
-				elseif(!isset($this->windowIndex[$packet->windowId])){
+				 * For some annoying reason, anvils send window ID 255 when crafting with them instead of the _actual_ anvil window ID
+				 * The result of this is anvils immediately closing when used. This is highly unusual, especially since the
+				 * container set slot packets send the correct window ID, but... eh
+				 */
+				/*elseif(!isset($this->windowIndex[$packet->windowId])){
 					$this->inventory->sendContents($this);
 					$pk = new ContainerClosePacket();
 					$pk->windowid = $packet->windowId;
 					$this->dataPacket($pk);
 					break;
-				}
+				}*/
 
 				$recipe = $this->server->getCraftingManager()->getRecipe($packet->id);
 
-				if($recipe === null or (($recipe instanceof BigShapelessRecipe or $recipe instanceof BigShapedRecipe) and $this->craftingType === 0)){
+				if($this->craftingType === self::CRAFTING_ANVIL){
+					$anvilInventory = $this->windowIndex[$packet->windowId] ?? null;
+					if($anvilInventory === null){
+						foreach($this->windowIndex as $window){
+							if($window instanceof AnvilInventory){
+								$anvilInventory = $window;
+								break;
+							}
+						}
+						if($anvilInventory === null){ //If it's _still_ null, then the player doesn't have a valid anvil window, cannot proceed.
+							$this->getServer()->getLogger()->debug("Couldn't find an anvil window for ".$this->getName().", exiting");
+							$this->inventory->sendContents($this);
+							break;
+						}
+					}
+
+					if($recipe === null){
+						//Item renamed
+						if(!$anvilInventory->onRename($this, $packet->output[0])){
+							$this->getServer()->getLogger()->debug($this->getName()." failed to rename an item in an anvil");
+							$this->inventory->sendContents($this);
+						}
+					}else{
+						//TODO: Anvil crafting recipes
+					}
+					break;
+				}elseif(($recipe instanceof BigShapelessRecipe or $recipe instanceof BigShapedRecipe) and $this->craftingType === 0){
+					$this->server->getLogger()->debug("Received big crafting recipe from ".$this->getName()." with no crafting table open");
+					$this->inventory->sendContents($this);
+					break;
+				}elseif($recipe === null){
 					$this->server->getLogger()->debug("Null (unknown) crafting recipe received from ".$this->getName()." for ".$packet->output[0]);
 					$this->inventory->sendContents($this);
 					break;
@@ -3144,7 +3187,8 @@ class Player extends Human implements CommandSender, InventoryHolder, ChunkLoade
 				if($this->spawned === false or $this->blocked === true or !$this->isAlive()){
 					break;
 				}
-				$this->craftingType = 0;
+				$this->craftingType = self::CRAFTING_SMALL;
+
 				$pos = new Vector3($packet->x, $packet->y, $packet->z);
 				if($pos->distanceSquared($this) > 10000){
 					break;
@@ -3467,7 +3511,7 @@ class Player extends Human implements CommandSender, InventoryHolder, ChunkLoade
 						$message = "death.attack.mob";
 						$params[] = $e->getNameTag() !== "" ? $e->getNameTag() : $e->getName();
 						break;
-					}else{
+					}else{¥
 						$params[] = "Unknown";
 					}
 				}
