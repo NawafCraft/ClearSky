@@ -19,6 +19,8 @@ class BaseTransaction implements Transaction{
 	protected $failures = 0;
 	/** @var bool */
 	protected $wasSuccessful = false;
+	/** @var string */
+	protected $achievements = [];
 
 	/**
 	 * @param Inventory $inventory
@@ -27,12 +29,13 @@ class BaseTransaction implements Transaction{
 	 * @param string[]  $achievements
 	 * @param int       $transactionType
 	 */
-	public function __construct($inventory, $slot, Item $targetItem, $transactionType = Transaction::TYPE_NORMAL){
+	public function __construct($inventory, $slot, Item $targetItem, $achievements = [], $transactionType = Transaction::TYPE_NORMAL){
 		$this->inventory = $inventory;
 		$this->slot = (int) $slot;
 		$this->targetItem = clone $targetItem;
 		$this->creationTime = microtime(true);
 		$this->transactionType = $transactionType;
+		$this->achievements = $achievements;
 	}
 
 	public function getCreationTime(){
@@ -73,6 +76,18 @@ class BaseTransaction implements Transaction{
 
 	public function getTransactionType(){
 		return $this->transactionType;
+	}
+	
+	public function getAchievements(){
+		return $this->achievements;
+	}
+	
+	public function hasAchievements(){
+		return count($this->achievements) !== 0;
+	}
+	
+	public function addAchievement(string $achievementName){
+		$this->achievements[] = $achievementName;
 	}
 
 	/**
@@ -153,12 +168,13 @@ class BaseTransaction implements Transaction{
 	 */
 
 	public function execute(Player $source): bool{
-
-		//How to do this... When the inventory is a temporary inventory, we want to recalculate all slots
-		//When it's a normal inventory, do whatever
 		if($this->getInventory()->processSlotChange($this)){ //This means that the transaction should be handled the normal way
 			if(!$source->getServer()->allowInventoryCheats){
 				$change = $this->getChange();
+
+				if($change === null){ //No changes to make, ignore this transaction
+					return true;
+				}
 
 				if($change["out"] instanceof Item){
 					if($this->getInventory()->slotContains($this->getSlot(), $change["out"]) and !$source->isCreative()){
@@ -180,6 +196,12 @@ class BaseTransaction implements Transaction{
 			}
 			$this->getInventory()->setItem($this->getSlot(), $this->getTargetItem(), false);
 		}
+		
+		//Process transaction achievements, like getting iron from a furnace
+		foreach($this->achievements as $achievement){
+			$source->awardAchievement($achievement);
+		}
+		
 		return true;
 	}
 }
