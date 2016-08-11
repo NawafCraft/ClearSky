@@ -234,6 +234,9 @@ class PlayerInventory extends BaseInventory{
 		}
 		if($index === $this->itemInHandIndex){
 			$this->sendHeldItem($this->getHolder()->getViewers());
+			if($send){
+				$this->sendHeldItem($this->getHolder());
+			}
 
 		}elseif($index >= $this->getSize()){ //Armour equipment
 			$this->sendArmorSlot($index, $this->getViewers());
@@ -483,7 +486,7 @@ class PlayerInventory extends BaseInventory{
 			if($player === $this->getHolder()){
 				for($i = 0; $i < $this->getHotbarSize(); ++$i){
 					$index = $this->getHotbarSlotIndex($i);
-					$pk->hotbar[$i] = ($index >= 0 ? $index + $this->getHotbarSize() : -1);
+					$pk->hotbar[$i] = $index <= -1 ? -1 : $index + $this->getHotbarSize();
 				}
 				if(($id = $player->getWindowId($this)) === -1 or $player->spawned !== true){
 					$this->close($player);
