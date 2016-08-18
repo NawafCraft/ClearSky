@@ -192,6 +192,9 @@ class Player extends Human implements CommandSender, InventoryHolder, ChunkLoade
 	/** @var Vector3 */
 	protected $sleeping = null;
 	protected $clientID = null;
+	private $isXbox = null;
+	private $xboxData = null;
+	private $webtokens = [];
 	private $loaderId = null;
 	protected $stepHeight = 0.6;
 	public $usedChunks = [];
@@ -340,6 +343,38 @@ class Player extends Human implements CommandSender, InventoryHolder, ChunkLoade
 
 	public function getClientSecret(){
 		return $this->clientSecret;
+	}
+	
+	/**
+	 * Returns if the player is Xbox authenticated.
+	*/
+	public function isXboxAuthenticated(){
+		return $this->isXbox && $this->isXboxValid();
+	}
+	
+	/**
+	 * @deprecated THIS FUNCTION MAY CHANGE ITS NAME DISAPPEAR AT ANY TIME.
+	*/
+	public function isXboxValid(){
+		return true;
+		/*
+		TODO:check the keys in the login function and return  if they are valid or not.
+		*/
+	}
+	
+	/**
+	 * Returns yet very unknown stuff. TODO:use this for authentication!
+	*/
+	public function getXboxData(){
+		return $this->xboxData;
+	}
+	
+	/**
+	 * This contains some data recieved in the LoginPacket
+	 * Hint: We do not know what all the data really means.
+	*/
+	public function getWebtokens(){
+		return $this->webtokens;
 	}
 
 	public function isBanned(){
@@ -676,14 +711,14 @@ class Player extends Human implements CommandSender, InventoryHolder, ChunkLoade
 	public function setDisplayName($name){
 		$this->displayName = $name;
 		if($this->spawned){
-			$this->server->updatePlayerListData($this->getUniqueId(), $this->getId(), $this->getDisplayName(), $this->getSkinName(), $this->getSkinData());
+			$this->server->updatePlayerListData($this->getUniqueId(), $this->getId(), $this->getDisplayName(), $this->getSkinId(), $this->getSkinData());
 		}
 	}
 
-	public function setSkin($str, $skinName){
-		parent::setSkin($str, $skinName);
+	public function setSkin($str, $skinId){
+		parent::setSkin($str, $skinId);
 		if($this->spawned){
-			$this->server->updatePlayerListData($this->getUniqueId(), $this->getId(), $this->getDisplayName(), $skinName, $str);
+			$this->server->updatePlayerListData($this->getUniqueId(), $this->getId(), $this->getDisplayName(), $skinId, $str);
 		}
 	}
 
@@ -1746,7 +1781,7 @@ class Player extends Human implements CommandSender, InventoryHolder, ChunkLoade
 	}
 
 	public function onPlayerPreLogin(){
-		// TODO: implement auth
+		// TODO: implement XBOX auth
 		$this->tryAuthenticate();
 	}
 
@@ -2024,6 +2059,11 @@ class Player extends Human implements CommandSender, InventoryHolder, ChunkLoade
 
 				$this->uuid = UUID::fromString($packet->clientUUID);
 				$this->rawUUID = $this->uuid->toBinary();
+				
+				$this->isXbox = $packet->isXbox;
+				$this->xboxData = $packet->xboxData;
+				
+				$this->webtokens = $packet->webtokens;
 
 				$valid = true;
 				$len = strlen($packet->username);
@@ -3419,9 +3459,12 @@ class Player extends Human implements CommandSender, InventoryHolder, ChunkLoade
 	public function setHealth($amount){
 		parent::setHealth($amount);
 		if($this->spawned === true){
-			$pk = new SetHealthPacket();
-			$pk->health = $this->getHealth();
-			$this->dataPacket($pk);
+			//Client hack: (Client always shows hit animation on SetHealthPacket)
+			if($this->getHealth() == 0){
+				$pk = new SetHealthPacket();
+				$pk->health = $this->getHealth();
+				$this->dataPacket($pk);
+			}
 		}
 	}
 
