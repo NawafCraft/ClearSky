@@ -339,7 +339,6 @@ class Server{
 	public $allowFrequencyPulse = true;
 	public $anvilEnabled = false;
 	public $pulseFrequency = 20;
-	public $playerMsgType = self::PLAYER_MSG_TYPE_MESSAGE;
 	public $playerLoginMsg = "";
 	public $playerLogoutMsg = "";
 	public $antiFly = false;
