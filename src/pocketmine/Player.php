@@ -132,7 +132,6 @@ use pocketmine\network\protocol\InteractPacket;
 use pocketmine\network\protocol\Info;
 use pocketmine\block\Air;
 use pocketmine\math\Math;
-use pocketmine\inventory\EnchantInventory;
 use pocketmine\inventory\AnvilInventory;
 
 /**
@@ -203,7 +202,6 @@ class Player extends Human implements CommandSender, InventoryHolder, ChunkLoade
 
 	private $loaderId = null;
 
-	private $loaderId = null;
 	protected $stepHeight = 0.6;
 	public $usedChunks = [];
 	protected $chunkLoadCount = 0;
@@ -2831,6 +2829,7 @@ class Player extends Human implements CommandSender, InventoryHolder, ChunkLoade
 					if($i < 9 and $item->getId() > 0){ //TODO: Get rid of this hack.
 						$item->setCount(1);
 					}
+				}
 
 				$canCraft = true;
 
@@ -2908,140 +2907,50 @@ class Player extends Human implements CommandSender, InventoryHolder, ChunkLoade
 										$canCraft = false;
 										break;
 									}
-
-					$canCraft = true;
-
-					if(count($packet->input) === 0){
-						/* If the packet "input" field is empty this needs to be handled differently.
-						* "input" is used to tell the server what items to remove from the client's inventory
-						* Because crafting takes the materials in the crafting grid, nothing needs to be taken from the inventory
-						* Instead, we take the materials from the crafting inventory
-						* To know what materials we need to take, we have to guess the crafting recipe used based on the
-						* output item and the materials stored in the crafting items
-						* The reason we have to guess is because Win10 sometimes sends a different recipe UUID
-						* say, if you put the wood for a door in the right hand side of the crafting grid instead of the left
-						* it will send the recipe UUID for a wooden pressure plate. Unknown currently whether this is a client
-						* bug or if there is something wrong with the way the server handles recipes.
-						* TODO: Remove recipe correction and fix desktop crafting recipes properly.
-						* In fact, TODO: Rewrite crafting entirely.
-						*/
-						$possibleRecipes = $this->server->getCraftingManager()->getRecipesByResult($packet->output[0]);
-						if(!$packet->output[0]->deepEquals($recipe->getResult())){
-							$this->server->getLogger()->debug("Mismatched desktop recipe received from player ".$this->getName().", expected ".$recipe->getResult().", got ".$packet->output[0]);
-						}
-						$recipe = null;
-						foreach($possibleRecipes as $r){
-							/* Check the ingredient list and see if it matches the ingredients we've put into the crafting grid
-							* As soon as we find a recipe that we have all the ingredients for, take it and run with it. */
-
-							//Make a copy of the floating inventory that we can make changes to.
-							$floatingInventory = clone $this->floatingInventory;
-							$ingredients = $r->getIngredientList();
-
-							//Check we have all the necessary ingredients.
-							foreach($ingredients as $ingredient){
-								if(!$floatingInventory->contains($ingredient)){
-									//We're short on ingredients, try the next recipe
+								}elseif($ingredient !== null and $item->getId() !== 0){
 									$canCraft = false;
 									break;
 								}
-								//This will only be reached if we have the item to take away.
-								$floatingInventory->removeItem($ingredient);
-							}
-							if($canCraft){
-								//Found a recipe that works, take it and run with it.
-								$recipe = $r;
-								break;
 							}
 						}
-
-						if($recipe !== null){
-							$this->server->getPluginManager()->callEvent($ev = new CraftItemEvent($this, $ingredients, $recipe));
-
-							if($ev->isCancelled()){
-								$this->inventory->sendContents($this);
-								break;
+					}elseif($recipe instanceof ShapelessRecipe){
+						$needed = $recipe->getIngredientList();
+						for($x = 0; $x < 3 and $canCraft; ++$x){
+							for($y = 0; $y < 3; ++$y){
+								$item = clone $packet->input[$y * 3 + $x];
+								foreach($needed as $k => $n){
+									if($n->deepEquals($item, $n->getDamage() !== null, $n->getCompoundTag() !== null)){
+										$remove = min($n->getCount(), $item->getCount());
+										$n->setCount($n->getCount() - $remove);
+										$item->setCount($item->getCount() - $remove);
+										if($n->getCount() === 0){
+											unset($needed[$k]);
+										}
+									}
+								}
+								if($item->getCount() > 0){
+									$canCraft = false;
+									break;
+								}
 							}
-
-							$this->floatingInventory = $floatingInventory; //Set player crafting inv to the idea one created in this process
-							$this->floatingInventory->addItem(clone $recipe->getResult()); //Add the result to our picture of the crafting inventory
-						}else{
-							$this->server->getLogger()->debug("Unmatched desktop crafting recipe " . $recipe->getId() . " from player " . $this->getName());
-							$this->inventory->sendContents($this);
-							break;
 						}
-					}else{
-						if($recipe instanceof ShapedRecipe){
-							for($x = 0; $x < 3 and $canCraft; ++$x){
-								for($y = 0; $y < 3; ++$y){
-									$item = $packet->input[$y * 3 + $x];
-									$ingredient = $recipe->getIngredient($x, $y);
-									if($item->getCount() > 0 and $item->getId() > 0){
-										if($ingredient == null){
-											$canCraft = false;
-											break;
-										}
-										if($ingredient->getId() != 0 and !$ingredient->deepEquals($item, $ingredient->getDamage() !== null, $ingredient->getCompoundTag() !== null)){
-											$canCraft = false;
-											break;
-										}
-
-									}elseif($ingredient !== null and $item->getId() !== 0){
-										$canCraft = false;
-										break;
-									}
-								}
-							}
-						}elseif($recipe instanceof ShapelessRecipe){
-							$needed = $recipe->getIngredientList();
-
-							for($x = 0; $x < 3 and $canCraft; ++$x){
-								for($y = 0; $y < 3; ++$y){
-									$item = clone $packet->input[$y * 3 + $x];
-
-									foreach($needed as $k => $n){
-										if($n->deepEquals($item, $n->getDamage() !== null, $n->getCompoundTag() !== null)){
-											$remove = min($n->getCount(), $item->getCount());
-											$n->setCount($n->getCount() - $remove);
-											$item->setCount($item->getCount() - $remove);
-
-											if($n->getCount() === 0){
-												unset($needed[$k]);
-											}
-										}
-									}
-
-									if($item->getCount() > 0){
-										$canCraft = false;
-										break;
-									}
-								}
-							}
-							if(count($needed) > 0){
-								$canCraft = false;
-							}
-						}else{
+						if(count($needed) > 0){
 							$canCraft = false;
 						}
 					}else{
 						$canCraft = false;
 					}
-
 					//Nasty hack. TODO: Get rid
 					$canCraft = true;//0.13.1大量物品本地配方出现问题,无法解决,使用极端(唯一)方法修复.
-
 					/** @var Item[] $ingredients */
 					$ingredients = $packet->input;
 					$result = $packet->output[0];
-
 					if(!$canCraft or !$recipe->getResult()->deepEquals($result)){
 						$this->server->getLogger()->debug("Unmatched recipe " . $recipe->getId() . " from player " . $this->getName() . ": expected " . $recipe->getResult() . ", got " . $result . ", using: " . implode(", ", $ingredients));
 						$this->inventory->sendContents($this);
 						break;
 					}
-
 					$used = array_fill(0, $this->inventory->getSize(), 0);
-
 					foreach($ingredients as $ingredient){
 						$slot = -1;
 						foreach($this->inventory->getContents() as $index => $i){
@@ -3051,94 +2960,77 @@ class Player extends Human implements CommandSender, InventoryHolder, ChunkLoade
 								break;
 							}
 						}
-
 						if($ingredient->getId() !== 0 and $slot === -1){
 							$canCraft = false;
 							break;
 						}
-
+					}
 					if(!$canCraft){
 						$this->server->getLogger()->debug("Unmatched recipe " . $recipe->getId() . " from player " . $this->getName() . ": client does not have enough items, using: " . implode(", ", $ingredients));
 						$this->inventory->sendContents($this);
 						break;
 					}
-
 					$this->server->getPluginManager()->callEvent($ev = new CraftItemEvent($this, $ingredients, $recipe));
-
 					if($ev->isCancelled()){
 						$this->inventory->sendContents($this);
 						break;
 					}
-
 					foreach($used as $slot => $count){
 						if($count === 0){
 							continue;
 						}
-
-						foreach($used as $slot => $count){
-							if($count === 0){
-								continue;
-							}
-
-							$item = $this->inventory->getItem($slot);
-
-							if($item->getCount() > $count){
-								$newItem = clone $item;
-								$newItem->setCount($item->getCount() - $count);
-							}else{
-								$newItem = Item::get(Item::AIR, 0, 0);
-							}
-
-							$this->inventory->setItem($slot, $newItem);
+						$item = $this->inventory->getItem($slot);
+						if($item->getCount() > $count){
+							$newItem = clone $item;
+							$newItem->setCount($item->getCount() - $count);
+						}else{
+							$newItem = Item::get(Item::AIR, 0, 0);
 						}
-
 						$this->inventory->setItem($slot, $newItem);
 					}
-
 					$extraItem = $this->inventory->addItem($recipe->getResult());
-					if(count($extraItem) > 0){ //Could not add all the items to our inventory (not enough space)
+					if(count($extraItem) > 0 and !$this->isCreative()){ //Could not add all the items to our inventory (not enough space)
 						foreach($extraItem as $item){
 							$this->level->dropItem($this, $item);
 						}
 					}
+				}
 				switch($recipe->getResult()->getId()){
 					case Item::WORKBENCH:
-						$this->awardAchievement("buildWorkBench");
-						break;
-						case Item::WOODEN_PICKAXE:
-						$this->awardAchievement("buildPickaxe");
-						break;
-						case Item::FURNACE:
-						$this->awardAchievement("buildFurnace");
-						break;
-						case Item::WOODEN_HOE:
-						$this->awardAchievement("buildHoe");
-						break;
-						case Item::BREAD:
-						$this->awardAchievement("makeBread");
-						break;
-						case Item::CAKE:
-						//TODO: detect complex recipes like cake that leave remains
-						$this->awardAchievement("bakeCake");
-						$this->inventory->addItem(Item::get(Item::BUCKET, 0, 3));
-						break;
-						case Item::STONE_PICKAXE:
-						case Item::GOLD_PICKAXE:
-						case Item::IRON_PICKAXE:
-						case Item::DIAMOND_PICKAXE:
-						$this->awardAchievement("buildBetterPickaxe");
-						break;
-						case Item::WOODEN_SWORD:
-						$this->awardAchievement("buildSword");
-						break;
-						case Item::DIAMOND:
-						$this->awardAchievement("diamond");
-						break;
-					}
-
+					$this->awardAchievement("buildWorkBench");
+					break;
+					case Item::WOODEN_PICKAXE:
+					$this->awardAchievement("buildPickaxe");
+					break;
+					case Item::FURNACE:
+					$this->awardAchievement("buildFurnace");
+					break;
+					case Item::WOODEN_HOE:
+					$this->awardAchievement("buildHoe");
+					break;
+					case Item::BREAD:
+					$this->awardAchievement("makeBread");
+					break;
+					case Item::CAKE:
+					//TODO: detect complex recipes like cake that leave remains
+					$this->awardAchievement("bakeCake");
+					$this->inventory->addItem(Item::get(Item::BUCKET, 0, 3));
+					break;
+					case Item::STONE_PICKAXE:
+					case Item::GOLD_PICKAXE:
+					case Item::IRON_PICKAXE:
+					case Item::DIAMOND_PICKAXE:
+					$this->awardAchievement("buildBetterPickaxe");
+					break;
+					case Item::WOODEN_SWORD:
+					$this->awardAchievement("buildSword");
+					break;
+					case Item::DIAMOND:
+					$this->awardAchievement("diamond");
+					break;
+				}
 				break;
-
-			case ProtocolInfo::CONTAINER_SET_SLOT_PACKET:
+				case ProtocolInfo::CONTAINER_SET_SLOT_PACKET:
 				if($this->spawned === false or $this->blocked === true or !$this->isAlive()){
 					break;
 				}
@@ -3506,7 +3398,7 @@ class Player extends Human implements CommandSender, InventoryHolder, ChunkLoade
 						$message = "death.attack.mob";
 						$params[] = $e->getNameTag() !== "" ? $e->getNameTag() : $e->getName();
 						break;
-					}else{¥
+					}else{
 						$params[] = "Unknown";
 					}
 				}
